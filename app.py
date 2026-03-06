@@ -247,13 +247,13 @@ def mostrar_imagenes(imagenes, titulo):
         return
     st.markdown(f'<div class="section-header">🖼️ &nbsp;{titulo}</div>', unsafe_allow_html=True)
     st.write("")
-    cols = st.columns(min(len(imagenes), 2))
-    for i, img in enumerate(imagenes):
-        with cols[i % 2]:
+    for img in imagenes:
+        col_izq, col_centro, col_der = st.columns([1, 2, 1])
+        with col_centro:
             st.image(img["bytes"], use_column_width=True)
-            st.markdown(f'<div class="img-caption">{img["label"]}</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="img-caption" style="text-align:center">{img["label"]}</div>', unsafe_allow_html=True)
 
-# ─── Funciones de extracción de campos ───────────────────────────────────────
+# ─── Funciones de extracción de campos 
 def extraer_dispensa_si(ruta, extension):
     filas_tabla = []
     if extension == ".pdf":
