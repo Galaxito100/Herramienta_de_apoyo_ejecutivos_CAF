@@ -358,10 +358,10 @@ if procesar:
                     "pagos recursos pendientes", "proyeccion de utilizaciones"
                 ])
             else:
-                todas_imgs  = extraer_imagenes_docx(ruta_tmp)
-                mid         = len(todas_imgs) // 2
-                imgs_pendiente = todas_imgs[:mid]   # primera mitad → monto por justificar
-                imgs_justif    = todas_imgs[mid:]   # segunda mitad → justificación
+                todas_imgs     = extraer_imagenes_docx(ruta_tmp)
+                mid            = len(todas_imgs) // 2
+                imgs_pendiente = todas_imgs[:mid]      # primera mitad → monto por justificar
+                imgs_justif    = todas_imgs[mid:mid+1] # solo 1 imagen → justificación
 
         os.unlink(ruta_tmp)
 
