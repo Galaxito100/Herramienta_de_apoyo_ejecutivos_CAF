@@ -1,5 +1,7 @@
 import re
 import os
+import io
+import zipfile
 import tempfile
 import streamlit as st
 from pathlib import Path
@@ -16,7 +18,6 @@ html, body, [class*="css"] {
     font-family: 'Open Sans', sans-serif;
     background-color: #f4f6f9;
 }
-
 .caf-header {
     background: linear-gradient(135deg, #004A8F 0%, #006BB6 100%);
     padding: 28px 36px;
@@ -43,7 +44,6 @@ html, body, [class*="css"] {
     text-transform: uppercase;
     margin-top: 4px;
 }
-
 .section-header {
     background: linear-gradient(90deg, #3A7D44 0%, #4E9D5A 100%);
     color: white;
@@ -56,7 +56,6 @@ html, body, [class*="css"] {
     border-radius: 6px;
     margin: 24px 0 0 0;
 }
-
 .caf-table {
     width: 100%;
     border-collapse: collapse;
@@ -83,7 +82,6 @@ html, body, [class*="css"] {
     letter-spacing: 0.3px;
 }
 .caf-table td:last-child { color: #1a2e45; }
-
 .caf-analysis-table {
     width: 100%;
     border-collapse: collapse;
@@ -106,11 +104,9 @@ html, body, [class*="css"] {
     font-family: 'Montserrat', sans-serif;
     font-weight: 700;
     font-size: 12px;
-    letter-spacing: 0.5px;
     width: 36px;
     text-align: center;
 }
-
 .caf-alert {
     background: #FFF8E1;
     border-left: 5px solid #F5A623;
@@ -122,7 +118,14 @@ html, body, [class*="css"] {
     box-shadow: 0 2px 8px rgba(245,166,35,0.12);
     margin-bottom: 4px;
 }
-
+.img-caption {
+    font-size: 12px;
+    color: #6b8299;
+    font-style: italic;
+    margin-top: 4px;
+    margin-bottom: 16px;
+    font-family: 'Montserrat', sans-serif;
+}
 div.stButton > button {
     background: linear-gradient(135deg, #004A8F, #006BB6);
     color: white;
@@ -142,7 +145,6 @@ div.stButton > button:hover {
     transform: translateY(-1px);
     box-shadow: 0 6px 18px rgba(0,74,143,0.4);
 }
-
 .caf-footer {
     text-align: center;
     color: #8fa3bd;
@@ -152,7 +154,6 @@ div.stButton > button:hover {
     border-top: 1px solid #dce6f0;
     letter-spacing: 0.5px;
 }
-
 #MainMenu, footer { visibility: hidden; }
 </style>
 """, unsafe_allow_html=True)
@@ -177,7 +178,7 @@ with col_btn:
     st.write("")
     procesar = st.button("🔍 Procesar")
 
-# ─── Funciones ────────────────────────────────────────────────────────────────
+# ─── Funciones de extracción de texto ────────────────────────────────────────
 def extraer_texto_pdf(ruta):
     import pdfplumber
     texto_completo = []
@@ -203,6 +204,56 @@ def extraer_texto_docx(ruta):
             lineas.append(" | ".join([c.text.strip() for c in fila.cells]))
     return "\n".join(lineas)
 
+# ─── Extracción de imágenes ───────────────────────────────────────────────────
+def extraer_imagenes_pdf(ruta, palabras_clave):
+    """Devuelve imágenes de páginas que contengan las palabras clave."""
+    imagenes = []
+    try:
+        import fitz
+        doc = fitz.open(ruta)
+        for num_pagina, pagina in enumerate(doc):
+            texto_pagina = pagina.get_text().lower()
+            if any(p.lower() in texto_pagina for p in palabras_clave):
+                mat = fitz.Matrix(2, 2)
+                pix = pagina.get_pixmap(matrix=mat)
+                imagenes.append({
+                    "label": f"Página {num_pagina + 1}",
+                    "bytes": pix.tobytes("png"),
+                })
+        doc.close()
+    except ImportError:
+        st.info("ℹ️ Instala `PyMuPDF` en requirements.txt para ver imágenes de PDF.")
+    return imagenes
+
+def extraer_imagenes_docx(ruta):
+    """Extrae todas las imágenes embebidas en el .docx."""
+    imagenes = []
+    try:
+        with zipfile.ZipFile(ruta, "r") as z:
+            nombres = sorted([n for n in z.namelist() if n.startswith("word/media/")])
+            for nombre in nombres:
+                ext_img = Path(nombre).suffix.lower()
+                if ext_img in [".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tiff"]:
+                    imagenes.append({
+                        "label": nombre.split("/")[-1],
+                        "bytes": z.read(nombre),
+                    })
+    except Exception as e:
+        st.warning(f"Error extrayendo imágenes del docx: {e}")
+    return imagenes
+
+def mostrar_imagenes(imagenes, titulo):
+    if not imagenes:
+        return
+    st.markdown(f'<div class="section-header">🖼️ &nbsp;{titulo}</div>', unsafe_allow_html=True)
+    st.write("")
+    cols = st.columns(min(len(imagenes), 2))
+    for i, img in enumerate(imagenes):
+        with cols[i % 2]:
+            st.image(img["bytes"], use_column_width=True)
+            st.markdown(f'<div class="img-caption">{img["label"]}</div>', unsafe_allow_html=True)
+
+# ─── Funciones de extracción de campos ───────────────────────────────────────
 def extraer_dispensa_si(ruta, extension):
     filas_tabla = []
     if extension == ".pdf":
@@ -286,7 +337,6 @@ if procesar:
     else:
         extension = Path(archivo.name).suffix.lower()
 
-        # Guardar en archivo temporal para funciones que necesitan ruta en disco
         with tempfile.NamedTemporaryFile(delete=False, suffix=extension) as tmp:
             tmp.write(archivo.read())
             ruta_tmp = tmp.name
@@ -296,6 +346,22 @@ if procesar:
             dispensas = extraer_dispensa_si(ruta_tmp, extension)
             pendiente = extraer_parrafo_pendiente(texto)
             justif    = extraer_seccion_justificacion(texto)
+
+            # Imágenes
+            if extension == ".pdf":
+                imgs_pendiente = extraer_imagenes_pdf(ruta_tmp, [
+                    "justificativos pendientes", "cuadro n°2", "cuadro no 2",
+                    "pendiente por justificar", "justificativo"
+                ])
+                imgs_justif = extraer_imagenes_pdf(ruta_tmp, [
+                    "proyección de utilizaciones", "cuadro n°3", "cuadro no 3",
+                    "pagos recursos pendientes", "proyeccion de utilizaciones"
+                ])
+            else:
+                todas_imgs  = extraer_imagenes_docx(ruta_tmp)
+                mid         = len(todas_imgs) // 2
+                imgs_pendiente = todas_imgs[:mid]   # primera mitad → monto por justificar
+                imgs_justif    = todas_imgs[mid:]   # segunda mitad → justificación
 
         os.unlink(ruta_tmp)
 
@@ -329,7 +395,9 @@ if procesar:
             rows = "".join([f"<tr><td>{p}</td></tr>" for p in pendiente])
             st.markdown(f'<table class="caf-analysis-table">{rows}</table>', unsafe_allow_html=True)
         else:
-            st.markdown('<div class="caf-alert">No se encontró la frase <strong>\'pendiente por justificar\'</strong> en el documento.</div>', unsafe_allow_html=True)
+            st.markdown('<div class="caf-alert">No se encontró la frase <strong>\'pendiente por justificar\'</strong>.</div>', unsafe_allow_html=True)
+
+        mostrar_imagenes(imgs_pendiente, "Cuadros – Monto por Justificar")
 
         # ── Tabla 3: Justificación ─────────────────────────────────────────────
         st.markdown('<div class="section-header">📝 &nbsp;Justificación</div>', unsafe_allow_html=True)
@@ -345,11 +413,11 @@ if procesar:
                     rows += f'<tr><td colspan="2">{p}</td></tr>'
             st.markdown(f'<table class="caf-analysis-table">{rows}</table>', unsafe_allow_html=True)
         else:
-            st.markdown('<div class="caf-alert">No se encontró la sección de <strong>Justificación</strong> en el documento.</div>', unsafe_allow_html=True)
+            st.markdown('<div class="caf-alert">No se encontró la sección de <strong>Justificación</strong>.</div>', unsafe_allow_html=True)
+
+        mostrar_imagenes(imgs_justif, "Cuadros – Justificación")
 
         st.markdown('<div class="caf-footer">CAF – Banco de Desarrollo de América Latina y el Caribe &nbsp;·&nbsp; Gerencia Corporativa de Riesgos</div>', unsafe_allow_html=True)
-
-
 
 
 
