@@ -1,5 +1,6 @@
 import re
 import os
+import tempfile
 import streamlit as st
 from pathlib import Path
 
@@ -16,7 +17,6 @@ html, body, [class*="css"] {
     background-color: #f4f6f9;
 }
 
-/* Header principal */
 .caf-header {
     background: linear-gradient(135deg, #004A8F 0%, #006BB6 100%);
     padding: 28px 36px;
@@ -44,7 +44,6 @@ html, body, [class*="css"] {
     margin-top: 4px;
 }
 
-/* Sección verde */
 .section-header {
     background: linear-gradient(90deg, #3A7D44 0%, #4E9D5A 100%);
     color: white;
@@ -58,7 +57,6 @@ html, body, [class*="css"] {
     margin: 24px 0 0 0;
 }
 
-/* Tabla de datos */
 .caf-table {
     width: 100%;
     border-collapse: collapse;
@@ -84,11 +82,8 @@ html, body, [class*="css"] {
     width: 240px;
     letter-spacing: 0.3px;
 }
-.caf-table td:last-child {
-    color: #1a2e45;
-}
+.caf-table td:last-child { color: #1a2e45; }
 
-/* Tabla de análisis (texto largo) */
 .caf-analysis-table {
     width: 100%;
     border-collapse: collapse;
@@ -116,7 +111,6 @@ html, body, [class*="css"] {
     text-align: center;
 }
 
-/* Caja de alerta */
 .caf-alert {
     background: #FFF8E1;
     border-left: 5px solid #F5A623;
@@ -129,7 +123,6 @@ html, body, [class*="css"] {
     margin-bottom: 4px;
 }
 
-/* Botón */
 div.stButton > button {
     background: linear-gradient(135deg, #004A8F, #006BB6);
     color: white;
@@ -143,18 +136,13 @@ div.stButton > button {
     cursor: pointer;
     transition: all 0.2s ease;
     box-shadow: 0 4px 14px rgba(0,74,143,0.3);
+    width: 100%;
 }
 div.stButton > button:hover {
     transform: translateY(-1px);
     box-shadow: 0 6px 18px rgba(0,74,143,0.4);
 }
 
-/* Selector */
-div[data-baseweb="select"] {
-    border-radius: 8px !important;
-}
-
-/* Pie de página */
 .caf-footer {
     text-align: center;
     color: #8fa3bd;
@@ -165,7 +153,6 @@ div[data-baseweb="select"] {
     letter-spacing: 0.5px;
 }
 
-/* Ocultar menú Streamlit */
 #MainMenu, footer { visibility: hidden; }
 </style>
 """, unsafe_allow_html=True)
@@ -181,24 +168,14 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# ─── Carpeta de documentos ────────────────────────────────────────────────────
-CARPETA = "documentos"
-os.makedirs(CARPETA, exist_ok=True)
-
-archivos = [f for f in os.listdir(CARPETA) if f.endswith((".pdf", ".docx"))]
-
-if not archivos:
-    st.warning(f"No hay archivos en la carpeta `{CARPETA}/`. Agrega un .pdf o .docx y recarga la página.")
-    st.stop()
-
-col_sel, col_btn = st.columns([3, 1])
-with col_sel:
-    archivo_sel = st.selectbox("📁 Selecciona un documento:", archivos, label_visibility="collapsed")
+# ─── Upload ───────────────────────────────────────────────────────────────────
+col_up, col_btn = st.columns([3, 1])
+with col_up:
+    archivo = st.file_uploader("Sube tu documento (.pdf o .docx)", type=["pdf", "docx"])
 with col_btn:
+    st.write("")
+    st.write("")
     procesar = st.button("🔍 Procesar")
-
-ruta      = os.path.join(CARPETA, archivo_sel)
-extension = Path(ruta).suffix.lower()
 
 # ─── Funciones ────────────────────────────────────────────────────────────────
 def extraer_texto_pdf(ruta):
@@ -304,11 +281,23 @@ def tabla_html(filas):
 
 # ─── Procesamiento ────────────────────────────────────────────────────────────
 if procesar:
-    with st.spinner("Procesando documento..."):
-        texto     = extraer_texto_pdf(ruta) if extension == ".pdf" else extraer_texto_docx(ruta)
-        dispensas = extraer_dispensa_si(ruta, extension)
-        pendiente = extraer_parrafo_pendiente(texto)
-        justif    = extraer_seccion_justificacion(texto)
+    if archivo is None:
+        st.warning("⚠️ Por favor sube un archivo antes de procesar.")
+    else:
+        extension = Path(archivo.name).suffix.lower()
+
+        # Guardar en archivo temporal para funciones que necesitan ruta en disco
+        with tempfile.NamedTemporaryFile(delete=False, suffix=extension) as tmp:
+            tmp.write(archivo.read())
+            ruta_tmp = tmp.name
+
+        with st.spinner("Procesando documento..."):
+            texto     = extraer_texto_pdf(ruta_tmp) if extension == ".pdf" else extraer_texto_docx(ruta_tmp)
+            dispensas = extraer_dispensa_si(ruta_tmp, extension)
+            pendiente = extraer_parrafo_pendiente(texto)
+            justif    = extraer_seccion_justificacion(texto)
+
+        os.unlink(ruta_tmp)
 
         nombre_prestatario = buscar_campo(texto, r"Nombre del Prestatario[\s|]*([^\n|]+)")
         nombre_operacion   = buscar_campo(texto, r"Nombre de la Operaci[oó]n[\s|]*([^\n|]+)")
@@ -320,43 +309,48 @@ if procesar:
         tipo_dispensa      = dispensas[0]["Tipo"]      if dispensas else "Ninguna marcada con SI"
         instancia_aprob    = dispensas[0]["Instancia"] if dispensas else "—"
 
-    # ── Tabla 1: Informe de la Operación ─────────────────────────────────────
-    st.markdown('<div class="section-header">📋 &nbsp;Informe de la Operación</div>', unsafe_allow_html=True)
-    st.markdown(tabla_html([
-        ("Nombre del Prestatario",   nombre_prestatario),
-        ("Nombre de la Operación",   nombre_operacion),
-        ("Monto Aprobado",           monto_aprobado),
-        ("Monto Desembolsado",       monto_desembolsado),
-        ("Unidad de Negocios",       unidad_negocios),
-        ("Garante",                  garante),
-        ("Instancia de Aprobación",  extension_plazo),
-        ("Tipo de Dispensa/Enmienda",tipo_dispensa),
-        ("Instancia Aprobatoria",    instancia_aprob),
-    ]), unsafe_allow_html=True)
+        # ── Tabla 1: Informe de la Operación ──────────────────────────────────
+        st.markdown('<div class="section-header">📋 &nbsp;Informe de la Operación</div>', unsafe_allow_html=True)
+        st.markdown(tabla_html([
+            ("Nombre del Prestatario",    nombre_prestatario),
+            ("Nombre de la Operación",    nombre_operacion),
+            ("Monto Aprobado",            monto_aprobado),
+            ("Monto Desembolsado",        monto_desembolsado),
+            ("Unidad de Negocios",        unidad_negocios),
+            ("Garante",                   garante),
+            ("Instancia de Aprobación",   extension_plazo),
+            ("Tipo de Dispensa/Enmienda", tipo_dispensa),
+            ("Instancia Aprobatoria",     instancia_aprob),
+        ]), unsafe_allow_html=True)
 
-    # ── Tabla 2: Monto por Justificar ─────────────────────────────────────────
-    st.markdown('<div class="section-header">⚠️ &nbsp;Monto por Justificar</div>', unsafe_allow_html=True)
-    if pendiente:
-        rows = "".join([f'<tr><td>{p}</td></tr>' for p in pendiente])
-        st.markdown(f'<table class="caf-analysis-table">{rows}</table>', unsafe_allow_html=True)
-    else:
-        st.markdown('<div class="caf-alert">No se encontró la frase <strong>\'pendiente por justificar\'</strong> en el documento.</div>', unsafe_allow_html=True)
+        # ── Tabla 2: Monto por Justificar ─────────────────────────────────────
+        st.markdown('<div class="section-header">⚠️ &nbsp;Monto por Justificar</div>', unsafe_allow_html=True)
+        if pendiente:
+            rows = "".join([f"<tr><td>{p}</td></tr>" for p in pendiente])
+            st.markdown(f'<table class="caf-analysis-table">{rows}</table>', unsafe_allow_html=True)
+        else:
+            st.markdown('<div class="caf-alert">No se encontró la frase <strong>\'pendiente por justificar\'</strong> en el documento.</div>', unsafe_allow_html=True)
 
-    # ── Tabla 3: Justificación ────────────────────────────────────────────────
-    st.markdown('<div class="section-header">📝 &nbsp;Justificación</div>', unsafe_allow_html=True)
-    if justif:
-        parrafos = [p.strip() for p in justif.split("\n") if p.strip()]
-        rows = ""
-        contador = 1
-        for p in parrafos:
-            # Detectar si el párrafo empieza con numeración romana
-            if re.match(r"^(i{1,3}v?|vi{0,3}|ix|x)\)", p, re.IGNORECASE):
-                rows += f'<tr><td class="label">{contador}</td><td>{p}</td></tr>'
-                contador += 1
-            else:
-                rows += f'<tr><td colspan="2">{p}</td></tr>'
-        st.markdown(f'<table class="caf-analysis-table">{rows}</table>', unsafe_allow_html=True)
-    else:
-        st.markdown('<div class="caf-alert">No se encontró la sección de <strong>Justificación</strong> en el documento.</div>', unsafe_allow_html=True)
+        # ── Tabla 3: Justificación ─────────────────────────────────────────────
+        st.markdown('<div class="section-header">📝 &nbsp;Justificación</div>', unsafe_allow_html=True)
+        if justif:
+            parrafos = [p.strip() for p in justif.split("\n") if p.strip()]
+            rows = ""
+            contador = 1
+            for p in parrafos:
+                if re.match(r"^(i{1,3}v?|vi{0,3}|ix|x)\)", p, re.IGNORECASE):
+                    rows += f'<tr><td class="label">{contador}</td><td>{p}</td></tr>'
+                    contador += 1
+                else:
+                    rows += f'<tr><td colspan="2">{p}</td></tr>'
+            st.markdown(f'<table class="caf-analysis-table">{rows}</table>', unsafe_allow_html=True)
+        else:
+            st.markdown('<div class="caf-alert">No se encontró la sección de <strong>Justificación</strong> en el documento.</div>', unsafe_allow_html=True)
 
-    st.markdown('<div class="caf-footer">CAF – Banco de Desarrollo de América Latina y el Caribe &nbsp;·&nbsp; Gerencia Corporativa de Riesgos</div>', unsafe_allow_html=True)
+        st.markdown('<div class="caf-footer">CAF – Banco de Desarrollo de América Latina y el Caribe &nbsp;·&nbsp; Gerencia Corporativa de Riesgos</div>', unsafe_allow_html=True)
+
+
+
+
+
+
