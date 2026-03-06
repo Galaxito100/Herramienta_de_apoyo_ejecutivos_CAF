@@ -248,7 +248,7 @@ def mostrar_imagenes(imagenes, titulo):
     st.markdown(f'<div class="section-header">🖼️ &nbsp;{titulo}</div>', unsafe_allow_html=True)
     st.write("")
     for img in imagenes:
-        col_izq, col_centro, col_der = st.columns([1, 2, 1])
+        col_izq, col_centro, col_der = st.columns([1, 1, 1])
         with col_centro:
             st.image(img["bytes"], use_column_width=True)
             st.markdown(f'<div class="img-caption" style="text-align:center">{img["label"]}</div>', unsafe_allow_html=True)
