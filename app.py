@@ -7,7 +7,7 @@ import streamlit as st
 from pathlib import Path
 
 # Configuración de página
-st.set_page_config(page_title="CAF – Extractor Dispensas", layout="wide", page_icon="🏦")
+st.set_page_config(page_title="CAF – Herramienta de apoyo a Ejecutivos", layout="wide", page_icon="🏦")
 
 #Estilo CAF
 st.markdown("""
