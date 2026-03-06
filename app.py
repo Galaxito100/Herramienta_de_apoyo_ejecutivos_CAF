@@ -6,10 +6,10 @@ import tempfile
 import streamlit as st
 from pathlib import Path
 
-# ─── Configuración de página ──────────────────────────────────────────────────
+# Configuración de página
 st.set_page_config(page_title="CAF – Extractor Dispensas", layout="wide", page_icon="🏦")
 
-# ─── Estilos CAF ──────────────────────────────────────────────────────────────
+#Estilo CAF
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800&family=Open+Sans:wght@400;600&display=swap');
@@ -158,7 +158,7 @@ div.stButton > button:hover {
 </style>
 """, unsafe_allow_html=True)
 
-# ─── Header ───────────────────────────────────────────────────────────────────
+# Header
 st.markdown("""
 <div class="caf-header">
     <div>
@@ -169,7 +169,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# ─── Upload ───────────────────────────────────────────────────────────────────
+#Upload
 col_up, col_btn = st.columns([3, 1])
 with col_up:
     archivo = st.file_uploader("Sube tu documento (.pdf o .docx)", type=["pdf", "docx"])
@@ -178,7 +178,7 @@ with col_btn:
     st.write("")
     procesar = st.button("🔍 Procesar")
 
-# ─── Funciones de extracción de texto ────────────────────────────────────────
+#  Funciones de extracción de texto
 def extraer_texto_pdf(ruta):
     import pdfplumber
     texto_completo = []
@@ -204,7 +204,7 @@ def extraer_texto_docx(ruta):
             lineas.append(" | ".join([c.text.strip() for c in fila.cells]))
     return "\n".join(lineas)
 
-# ─── Extracción de imágenes ───────────────────────────────────────────────────
+# Extracción de imágenes 
 def extraer_imagenes_pdf(ruta, palabras_clave):
     """Devuelve imágenes de páginas que contengan las palabras clave."""
     imagenes = []
@@ -253,7 +253,7 @@ def mostrar_imagenes(imagenes, titulo):
             st.image(img["bytes"], use_column_width=True)
             st.markdown(f'<div class="img-caption" style="text-align:center">{img["label"]}</div>', unsafe_allow_html=True)
 
-# ─── Funciones de extracción de campos 
+# Funciones de extracción de campos 
 def extraer_dispensa_si(ruta, extension):
     filas_tabla = []
     if extension == ".pdf":
@@ -330,7 +330,7 @@ def tabla_html(filas):
         rows += f"<tr><td>{label}</td><td>{valor or '—'}</td></tr>"
     return f'<table class="caf-table">{rows}</table>'
 
-# ─── Procesamiento ────────────────────────────────────────────────────────────
+# Procesamiento
 if procesar:
     if archivo is None:
         st.warning("⚠️ Por favor sube un archivo antes de procesar.")
@@ -381,10 +381,10 @@ if procesar:
             ("Nombre del Prestatario",    nombre_prestatario),
             ("Nombre de la Operación",    nombre_operacion),
             ("Monto Aprobado",            monto_aprobado),
-            ("Monto Desembolsado",        monto_desembolsado),
+            ("Monto Desembolsado (%)",        monto_desembolsado),
             ("Unidad de Negocios",        unidad_negocios),
-            ("Garante",                   garante),
-            ("Instancia de Aprobación",   extension_plazo),
+            ("Garante (Si aplica)",                   garante),
+            ("Instancia de Aprobación (Si hubo extensión de plazo)",   extension_plazo),
             ("Tipo de Dispensa/Enmienda", tipo_dispensa),
             ("Instancia Aprobatoria",     instancia_aprob),
         ]), unsafe_allow_html=True)
@@ -415,7 +415,7 @@ if procesar:
         else:
             st.markdown('<div class="caf-alert">No se encontró la sección de <strong>Justificación</strong>.</div>', unsafe_allow_html=True)
 
-        mostrar_imagenes(imgs_justif, "Cuadros – Justificación")
+        mostrar_imagenes(imgs_justif, "Cuadro – Justificación")
 
         st.markdown('<div class="caf-footer">CAF – Banco de Desarrollo de América Latina y el Caribe &nbsp;·&nbsp; Gerencia Corporativa de Riesgos</div>', unsafe_allow_html=True)
 
